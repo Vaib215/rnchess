@@ -3,6 +3,7 @@ import { GestureDetector } from "react-native-gesture-handler";
 import { Circle, Image, Square, Text, View, XStack, YStack } from "tamagui";
 import useChess from "../hooks/use-chess";
 import CapturedPieces from "../components/captured";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 
 const Chess = memo(() => {
   const {
@@ -14,7 +15,21 @@ const Chess = memo(() => {
     handlePieceSelection,
     handleMove,
     pan,
+    turn
   } = useChess();
+
+  const animatedStyles = useAnimatedStyle(() => {
+    return {
+      transform: [
+        {
+          translateX: dragPosition.value[1],
+        },
+        {
+          translateY: dragPosition.value[0],
+        },
+      ],
+    };
+  });
 
   return (
     <View mih={"100%"} ai="center" jc="center">
@@ -65,38 +80,46 @@ const Chess = memo(() => {
             </YStack>
           ))}
           {pieces.map((piece, i) => (
-            <Image
-              pos={"absolute"}
+            <Animated.View
               key={i}
-              source={piece.asset}
-              onPressIn={handlePieceSelection.bind(null, piece.position, piece)}
-              w="$8"
-              h="$8"
-              zi={selectedPosition === piece.position ? 1 : 0}
-              cursor="pointer"
-              t={
-                selectedPosition === piece.position
-                  ? dragPosition[0]
-                  : 84 * piece.position[0]
-              }
-              l={
-                selectedPosition === piece.position
-                  ? dragPosition[1]
-                  : 84 * piece.position[1]
-              }
-              $sm={{
-                t:
-                  selectedPosition === piece.position
-                    ? (dragPosition[0] * 44) / 84
-                    : 44 * piece.position[0],
-                l:
-                  selectedPosition === piece.position
-                    ? (dragPosition[1] * 44) / 84
-                    : 44 * piece.position[1],
-                w: "$4",
-                h: "$4",
-              }}
-            />
+              style={[
+                piece.position === selectedPosition ? animatedStyles: {
+                  transform: [
+                    {
+                      translateX: 0,
+                    },
+                    {
+                      translateY: 0,
+                    },
+                  ],
+                },
+                {
+                  zIndex: selectedPosition === piece.position ? 1 : 0,
+                  position: "absolute",
+                },
+              ]}
+            >
+              <Image
+                source={piece.asset}
+                onPressIn={handlePieceSelection.bind(
+                  null,
+                  piece.position,
+                  piece
+                )}
+                w="$8"
+                h="$8"
+                t={84 * piece.position[0]}
+                l={84 * piece.position[1]}
+                zi={selectedPosition === piece.position ? 1 : 0}
+                cursor="pointer"
+                $sm={{
+                  w: "$4",
+                  h: "$4",
+                  t: 44 * piece.position[0],
+                  l: 44 * piece.position[1],
+                }}
+              />
+            </Animated.View>
           ))}
           {selectedPosition !== null &&
             pieces

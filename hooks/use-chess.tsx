@@ -1,5 +1,7 @@
 import React, { useCallback } from "react";
+import { useWindowDimensions } from "react-native";
 import { Gesture } from "react-native-gesture-handler";
+import { useSharedValue } from "react-native-reanimated";
 
 export default function useChess() {
   const [pieces, setPieces] = React.useState<
@@ -123,7 +125,7 @@ export default function useChess() {
   const [selectedPosition, setSelectedPosition] = React.useState<
     number[] | null
   >(null);
-  const [dragPosition, setDragPosition] = React.useState<number[]>([0, 0]);
+  const dragPosition = useSharedValue([0, 0]);
   const [capturedPieces, setCapturedPieces] = React.useState<
     {
       asset: any;
@@ -132,6 +134,8 @@ export default function useChess() {
     }[]
   >([]);
   const [turn, setTurn] = React.useState("white");
+  const width = useWindowDimensions().width;
+  const MULTIPLIER = width > 500 ? 84 : 44;
 
   const isMoveLegal = useCallback(
     (
@@ -341,79 +345,72 @@ export default function useChess() {
           return;
         }
         setSelectedPosition(position);
-        setDragPosition(position.map((coord) => coord * 84));
+        dragPosition.value = [0, 0]; // Reset drag position
       }
     },
     [pieces, selectedPosition, turn, populatePossibleMoves, isMoveLegal]
   );
 
-  const handleMove = useCallback((move: [number, number]) => {
-    const piece = pieces.find(
-      (p) => JSON.stringify(p.position) === JSON.stringify(selectedPosition)
-    );
-    if (piece) {
-      // Check if the move is valid and it's the correct player's turn
-      if (
-        piece.possibleMoves?.some(
-          (m) => m[0] === move[0] && m[1] === move[1]
-        ) &&
-        piece.color === turn
-      ) {
-        // Find if there is a piece on the move position
-        const targetIndex = pieces.findIndex(
-          (p) => p.position[0] === move[0] && p.position[1] === move[1]
-        );
-        let newPieces = [...pieces];
-        if (targetIndex !== -1) {
-          // Capture logic
-          const capturedPiece = newPieces.splice(targetIndex, 1)[0]; // Remove the captured piece from the board
-          setCapturedPieces((prev) => [
-            ...prev,
-            {
-              asset: capturedPiece.asset,
-              type: capturedPiece.type,
-              color: capturedPiece.color,
-            },
-          ]);
+  const handleMove = useCallback(
+    ([yCoor, xCoor]: [number, number]) => {
+      const piece = pieces.find(
+        (p) => JSON.stringify(p.position) === JSON.stringify(selectedPosition)
+      );
+      if (piece) {
+        // Check if the move is valid and it's the correct player's turn
+        if (
+          piece.possibleMoves?.some((m) => m[0] === yCoor && m[1] === xCoor) &&
+          piece.color === turn
+        ) {
+          // Find if there is a piece on the move position
+          const targetIndex = pieces.findIndex(
+            (p) => p.position[0] === yCoor && p.position[1] === xCoor
+          );
+          let newPieces = [...pieces];
+          if (targetIndex !== -1) {
+            // Capture logic
+            const capturedPiece = newPieces.splice(targetIndex, 1)[0]; // Remove the captured piece from the board
+            setCapturedPieces((prev) => [
+              ...prev,
+              {
+                asset: capturedPiece.asset,
+                type: capturedPiece.type,
+                color: capturedPiece.color,
+              },
+            ]);
+          }
+          // Move the piece to the new position
+          newPieces = newPieces.map((p) =>
+            p.position === selectedPosition
+              ? { ...p, position: [yCoor, xCoor] }
+              : p
+          );
+          setPieces(newPieces);
+          setTurn(turn === "white" ? "black" : "white"); // Toggle turn
+          dragPosition.value = [0, 0]; // Reset drag position
+          setSelectedPosition(null); // Clear selected position
+        } else {
+          dragPosition.value = [0, 0];
+          setSelectedPosition(null);
         }
-        // Move the piece to the new position
-        newPieces = newPieces.map((p) =>
-          p.position === selectedPosition
-            ? { ...p, position: move, possibleMoves: [] }
-            : p
-        );
-        setPieces(newPieces);
-        setTurn(turn === "white" ? "black" : "white"); // Toggle turn
-        setSelectedPosition(null); // Clear selected position
-        setDragPosition([move[0] * 84, move[1] * 84]); // Update drag position to new valid position
-      } else {
-        // Invalid move, reset to original position
-        setDragPosition([
-          selectedPosition?.[0]! * 84,
-          selectedPosition?.[1]! * 84,
-        ]);
-        setSelectedPosition(null);
       }
-    }
-  }, [pieces, selectedPosition, turn]);
+    },
+    [pieces, selectedPosition, turn]
+  );
 
   const pan = Gesture.Pan()
     .runOnJS(true)
-    .onUpdate(({ translationX, translationY }) => {
+    .onChange(({ translationX, translationY }) => {
       "worklet";
       if (selectedPosition === null) return;
       // Continuously update drag position based on gesture delta
-      const newDragPosition = [
-        selectedPosition[0] * 84 + translationY,
-        selectedPosition[1] * 84 + translationX,
-      ];
-      setDragPosition(newDragPosition);
+      dragPosition.value = [translationY, translationX];
     })
     .onEnd(({ translationX, translationY }) => {
       "worklet";
       if (selectedPosition === null) return;
-      const xCoor = Math.round(selectedPosition[1] + translationX / 84);
-      const yCoor = Math.round(selectedPosition[0] + translationY / 84);
+      const xCoor = Math.round(selectedPosition[1] + translationX / MULTIPLIER);
+      const yCoor = Math.round(selectedPosition[0] + translationY / MULTIPLIER);
       handleMove([yCoor, xCoor]);
     });
 
